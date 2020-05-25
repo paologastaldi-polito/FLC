@@ -1,0 +1,95 @@
+DOUBLE x[5]
+INT i
+INT j
+DOUBLE swap
+INT pos
+EVAL -2.0
+ASS x[0]
+EVAL -3.0
+ASS x[1]
+EVAL 3.0
+ASS x[2]
+EVAL 5.0
+ASS x[3]
+EVAL 2.5
+ASS x[4]
+EVAL 5
+ASS pos
+L3 EVAL pos 0 >
+GOTOF L4
+EVAL 0
+ASS i
+L1 EVAL i pos 1 - <
+GOTOF L2
+EVAL i 1 +
+ASS j
+EVAL x[i] x[j] >
+GOTOF L0
+EVAL x[j]
+ASS swap
+EVAL x[i]
+ASS x[j]
+EVAL swap
+ASS x[i]
+L0: EVAL i 1 +
+ASS i
+GOTO L1:
+L2: EVAL pos 1 -
+ASS pos
+GOTO L3:
+L4: EVAL 0
+ASS i
+L5 EVAL i 5 <
+GOTOF L6
+PRINT x[i]
+EVAL i 1 +
+ASS i
+GOTO L5:
+L6: DOUBLE x[5]
+INT i
+INT j
+DOUBLE swap
+INT pos
+EVAL -2.0
+ASS x[0]
+EVAL -3.0
+ASS x[1]
+EVAL 3.0
+ASS x[2]
+EVAL 5.0
+ASS x[3]
+EVAL 2.5
+ASS x[4]
+EVAL 5
+ASS pos
+L3 EVAL pos 0 >
+GOTOF L4
+EVAL 0
+ASS i
+L1 EVAL i pos 1 - <
+GOTOF L2
+EVAL i 1 +
+ASS j
+EVAL x[i] x[j] >
+GOTOF L0
+EVAL x[j]
+ASS swap
+EVAL x[i]
+ASS x[j]
+EVAL swap
+ASS x[i]
+L0:EVAL i 1 +
+ASS i
+GOTO L1:
+L2: EVAL pos 1 -
+ASS pos
+GOTO L3:
+L4: EVAL 0
+ASS i
+L5 EVAL i 5 <
+GOTOF L6
+PRINT x[i]
+EVAL i 1 +
+ASS i
+GOTO L5:
+L6: 

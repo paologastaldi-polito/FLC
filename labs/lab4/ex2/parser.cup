@@ -1,0 +1,271 @@
+
+
+import java_cup.runtime.*;
+import java.io.*;
+
+
+
+
+parser code {:
+
+    // Redefinition of error functions
+    public void report_error(String message, Object info) {
+        System.err.println("ERROR: Syntax error");
+        if (info instanceof Symbol)
+            if (((Symbol)info).left != -1){
+                int line = (((Symbol)info).left)+1;
+                int column = (((Symbol)info).right)+1;
+                System.err.println(" (linea "+line+", colonna "+column+"): " + message);
+            } else System.err.println(": " + message);
+        else System.err.println(": " + message);
+    }
+    
+    // Return actual symbol
+    public Symbol getToken() {
+        return ((Symbol)stack.elementAt(tos));
+    }
+
+    // Global variables
+    public boolean error_found = false;
+:};
+
+
+
+// Terminal tokens
+terminal INT, DOUBLE, ID;
+terminal PRINT, IF, WHILE, ELSE;
+terminal RO, RC, BO, BC, SC, CM, SO, S;
+terminal PLUS, MINUS, STAR, DIV;
+terminal MIN, MAJ, MIN_EQ, EQ_MIN, MAJ_EQ, EQ_MAJ, EQ;
+terminal AND, OR, NOT;
+terminal INT_TYPE, DOUBLE_TYPE;
+terminal UMINUS;
+
+// Non terminal tokens
+non terminal prog, stmt_list, stmt, if, while, assignment, print;
+non terminal exp;
+non terminal mineq, mageq;
+
+non terminal decl_list, decl, var_list, var;
+non terminal type, array;
+non terminal if_condition, while_condition;
+non terminal id;
+
+// Precedences and associativities
+// lower precedences
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence left MIN, MAJ, MIN_EQ, EQ_MIN, MAJ_EQ, EQ_MAJ, EQ;
+precedence left PLUS, MINUS;
+precedence left STAR, DIV;
+precedence left UMINUS;
+
+precedence left ELSE;
+
+// higher precedences
+
+
+//////////////////////////////////////
+// Grammar start
+//////////////////////////////////////
+
+start with prog;
+
+
+prog ::= decl_list stmt_list
+    {: 
+        if(!parser.error_found)
+            System.out.println("Programm correctly recognized");
+        else
+            System.out.println("Programm with errors");
+    :}
+;
+
+
+//////////////////////////////////////
+// Declarations
+//////////////////////////////////////
+
+decl_list ::= decl_list decl | 
+;
+
+decl ::= type var_list S |
+    type error S
+        {:
+            parser.report_error("INCORRECT DECLARATION!", parser.getToken());
+            parser.error_found = true;
+        :}
+;
+
+type ::= INT_TYPE | DOUBLE_TYPE
+;
+
+var_list ::= var | var_list CM var
+;
+
+var ::= ID array
+;
+
+array ::= | array SO INT SC
+    /*| array error INT SC
+        {:
+            parser.report_error("EXPECTED [!", parser.getToken());
+            parser.error_found = true;
+        :}
+      | array SO INT error
+        {:
+            parser.report_error("EXPECTED ]!", parser.getToken());
+            parser.error_found = true;
+        :}*/
+;
+
+
+//////////////////////////////////////
+// Instructions
+//////////////////////////////////////
+
+stmt_list ::= stmt_list stmt | stmt 
+    | error stmt
+        {:
+            parser.report_error("INCORRECT STATEMENT!", parser.getToken());
+            parser.error_found = true;
+        :}
+;
+
+
+stmt ::= if | while | assignment | print | BO stmt_list BC
+    | BO error BC
+        {:
+            parser.report_error("INCORRECT BLOCK {...}!", parser.getToken());
+            parser.error_found = true;
+        :}
+    | error S
+        {:
+            parser.report_error("INCORRECT!", parser.getToken());
+            parser.error_found = true;
+        :}
+;
+
+// Assignment instruction
+assignment ::= id S | id EQ exp S 
+    | id EQ error S
+        {:
+            parser.report_error("INCORRECT ASSIGNMENT!", parser.getToken());
+            parser.error_found = true;
+        :}
+    | error EQ exp S
+        {:
+            parser.report_error("INCORRECT ASSIGNMENT!", parser.getToken());
+            parser.error_found = true;
+        :}
+;
+
+// PRINT instruction
+print ::= PRINT id S
+    | PRINT error S
+        {:
+            parser.report_error("INCORRECT PRINT!", parser.getToken());
+            parser.error_found = true;
+        :}
+;
+
+
+// IF instruction
+if ::= IF if_condition stmt ELSE stmt
+     | IF if_condition stmt
+     | IF if_condition stmt error stmt
+        {:
+            parser.report_error("EXPECTED else BEFORE STATEMENT!", parser.getToken());
+            parser.error_found = true;
+        :}
+;
+
+if_condition ::= RO exp RC
+    | RO error RC
+        {:
+            parser.report_error("INCORRECT IF CONDITION!", parser.getToken());
+            parser.error_found = true;
+        :}
+    | error exp RC
+        {:
+            parser.report_error("EXPECTED (!", parser.getToken());
+            parser.error_found = true;
+        :}
+    | RO exp error
+        {:
+            parser.report_error("EXPECTED )!", parser.getToken());
+            parser.error_found = true;
+        :}
+;
+
+
+// WHILE instruction
+while ::= WHILE while_condition stmt
+;
+
+while_condition ::= RO exp RC
+    | RO error RC
+        {:
+            parser.report_error("INCORRECT WHILE CONDITION EXPRESSION!", parser.getToken());
+            parser.error_found = true;
+        :}
+    | error exp RC
+        {:
+            parser.report_error("EXPECTED (!", parser.getToken());
+            parser.error_found = true;
+        :}
+    | RO exp error
+        {:
+            parser.report_error("EXPECTED )!", parser.getToken());
+            parser.error_found = true;
+        :}
+;
+
+
+// Expressions
+exp ::= 
+    /* Espressioni logiche */
+    exp AND exp
+    | exp OR exp
+    | NOT exp
+
+    /* Espressioni di confronto */
+    | exp EQ EQ exp
+    | exp MIN exp
+    | exp MAJ exp
+    | exp mineq exp
+    | exp mageq exp
+
+    /* Espressioni aritmetiche */
+    | exp PLUS exp
+    | exp MINUS exp
+    | exp STAR exp
+    | exp DIV exp
+    | RO exp RC
+    | RO error RC
+        {:
+            parser.report_error("INCORRECT EXPRESSION!", parser.getToken());
+            parser.error_found = true;
+        :}
+    | id
+    | INT
+    | DOUBLE
+    | MINUS INT %prec UMINUS
+    | MINUS DOUBLE %prec UMINUS
+;
+
+
+mineq ::= MIN_EQ | EQ_MIN;
+mageq ::= MAJ_EQ | EQ_MAJ;
+
+
+id ::= ID
+      |ID SO INT SC
+      |ID SO ID SC
+      | error SC
+        {:
+            parser.report_error("INCORRECT VECTOR!", parser.getToken());
+            parser.error_found = true;
+        :}
+;

@@ -1,0 +1,219 @@
+import java_cup.runtime.*;
+import java.io.*;
+import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.*;
+import java.util.function.*;
+import java.lang.Object;
+import java.lang.Math;
+
+init with {:
+    symbolTable = new HashMap<String, Double[]>();
+:};
+
+parser code {:
+    // Redefinition of error functions
+    public void report_error(String message, Object info) {
+        System.err.println("ERROR: Syntax error");
+        if (info instanceof Symbol)
+            if (((Symbol)info).left != -1){
+                int line = (((Symbol)info).left)+1;
+                int column = (((Symbol)info).right)+1;
+                System.err.println(" (linea "+line+", colonna "+column+"): " + message);
+            } else System.err.println(": " + message);
+        else System.err.println(": " + message);
+    }
+    
+    // Return actual symbol
+    public Symbol getToken() {
+        return ((Symbol)stack.elementAt(tos));
+    }
+
+    // Global variables
+    public HashMap <String, Double[]>symbolTable;
+
+    public Double[] perform(Double[] v1, Double[] v2, DoubleBinaryOperator action) {
+        // int maxSize = v1.length>v2.length ? v1.length:v2.length;
+        int maxSize = Math.max(v1.length, v2.length);
+        Double[] res = new Double[maxSize];
+        for(int i=0; i < maxSize; i++) {
+            Double op1 = (v1.length == 1 ? v1[0] : v1[i]);
+            Double op2 = (v2.length == 1 ? v2[0] : v2[i]);
+
+            res[i] = action.applyAsDouble(op1, op2);
+            // System.out.println(op1 + " action " + op2 + " = " + res[i]); // debug
+        }
+        return res;
+    }
+
+    public String toString(Double[] v) {
+        StringBuffer s = new StringBuffer();
+        int i;
+
+        s.append("[ ");
+        for(i=0; i < v.length -1; i++){
+            s.append(v[i] + ", ");
+        }
+        s.append(v[i] + " ]");
+
+        return s.toString();
+    }
+:};
+
+// Terminal
+terminal Double REAL;
+terminal String VAR;
+terminal String VET;
+terminal SO, SC;
+terminal POW, MUL, DIV, DOT, ADD, SUB;
+terminal EQ;
+terminal CM, S, QM;
+
+// Non terminal
+non terminal session, session_base;
+non terminal operation_list;
+non terminal Double[] operation;
+non terminal Double[] operation_base;
+non terminal Double[] exp;
+non terminal Double[] operand;
+non terminal Double[] scalar;
+non terminal Double[] vector;
+non terminal Double[] arg_list;
+non terminal Double[] arg;
+non terminal Double[] assign;
+
+// Precedences
+precedence left S;
+precedence left EQ;
+precedence left VAR;
+precedence left VET;
+
+precedence left SUB;
+precedence left ADD;
+precedence left DOT;
+precedence left DIV;
+precedence left MUL;
+precedence left POW; // higher priority
+
+// Grammar
+start with session
+;
+
+session ::= session_base QM
+    {: System.out.println("--- CORRECT END ---"); :}
+;
+
+session_base ::= operation_list
+;
+
+operation_list ::= operation | operation_list operation
+;
+
+operation ::= operation_base S
+;
+
+operation_base ::= exp:v
+        {: System.out.println("= " + parser.toString(v)); :}
+    | assign:v
+        {: System.out.println("assignment = " + parser.toString(v)); :}
+;
+
+operand ::= scalar:v
+        {: RESULT = v; :}
+    | vector:v
+        {: RESULT = v; :}
+    | ADD operand:v
+        {: RESULT = v; :}
+    | SUB operand:v
+        {: RESULT = v; :}
+;
+
+exp ::= exp:o1 POW exp:o2
+        {:
+            RESULT = parser.perform(o1, o2, (a, b) -> (Math.pow(a, b)));
+        :}
+    | exp:o1 MUL exp:o2
+        {:
+            RESULT = parser.perform(o1, o2, (a, b) -> (a * b));
+        :}
+	| exp:o1 DIV exp:o2
+        {:
+            RESULT = parser.perform(o1, o2, (a, b) -> (a / b));
+        :}
+	| exp:o1 ADD exp:o2
+        {:
+            if(o1.length != o2.length)
+                parser.report_error("VECTOR SIZES MUST BE EQUAL!", parser.getToken());
+            else
+                RESULT = parser.perform(o1, o2, (a, b) -> (a + b));
+        :}
+	| exp:o1 SUB exp:o2
+        {:
+            if(o1.length != o2.length)
+                parser.report_error("VECTOR SIZES MUST BE EQUAL!", parser.getToken());
+            else
+                RESULT = parser.perform(o1, o2, (a, b) -> (a - b));
+        :}
+	
+	| exp:o1 DOT exp:o2
+        {:
+            if(o1.length != o2.length)
+                parser.report_error("VECTOR SIZES MUST BE EQUAL!", parser.getToken());
+            else {
+                Double[] mulRes = parser.perform(o1, o2, (a, b) -> (a * b));
+                Double[] accum = new Double[1];
+                accum[0] = 0.0;
+                for(Double d : mulRes)
+                    accum[0] += d;
+                RESULT = accum;
+            }
+        :}
+    | operand:o
+        {: RESULT = o; :}
+;
+
+vector ::= VET:k
+        {: RESULT = parser.symbolTable.get(k); :}
+    | SO arg_list:v SC
+        {: RESULT = v; :}
+;
+
+arg_list ::= arg:v
+        {: RESULT = v; :}
+    | arg_list:v1 CM arg:v2
+        {:
+            Double[] res = Arrays.copyOf(v1, v1.length +1);
+            res[v1.length] = v2[0];
+            RESULT = res;
+        :}
+;
+
+arg ::= scalar:v
+    {: RESULT = v; :}
+;
+
+scalar ::= VAR:k
+        {: RESULT = parser.symbolTable.get(k); :}
+    | REAL:v
+        {:
+            Double[] res = new Double[1];
+            res[0] = v;
+            RESULT = res;
+        :}
+;
+
+assign ::= VAR:k EQ exp:v
+        {: 
+            if(v.length == 1)
+                parser.symbolTable.put(k, v); // if already exists, it will be replaced
+            else
+                parser.report_error("UNABLE TO ASSIGN A VECTOR TO A SCALAR", parser.getToken());
+
+            RESULT = v;
+        :}
+	| VET:k EQ exp:v
+        {:
+            parser.symbolTable.put(k, Arrays.copyOf(v, v.length));
+            RESULT = v;
+        :}
+;

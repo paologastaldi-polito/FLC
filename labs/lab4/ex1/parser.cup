@@ -1,0 +1,121 @@
+/*
+Gastaldi Paolo
+lab4, ex1
+11-05-2020
+*/
+
+import java_cup.runtime.*;
+import java.io.*;
+
+parser code {:
+
+    // Redefinition of error functions
+    public void report_error(String message, Object info) {
+        System.err.print("ERROR: Syntax error");
+        if (info instanceof Symbol)
+            if (((Symbol)info).left != -1){
+                int line = (((Symbol)info).left)+1;
+                int column = (((Symbol)info).right)+1;
+                System.err.println(" (linea "+line+", colonna "+column+"): " + message);
+            } else System.err.println(": " + message);
+        else System.err.println(": " + message);
+    }
+    
+    // Return actual symbol
+    public Symbol getToken() {
+        return ((Symbol)stack.elementAt(tos));
+    }
+
+    // Global variables
+    public boolean fact_found = false;
+    public boolean interrogation_found = false;
+    public boolean error_found = false;
+:};
+
+// Terminal tokens
+terminal INT, REAL;
+terminal ATOM_STRING, VAR_STRING;
+terminal QM_DASH, COL_DASH;
+terminal DOT, CM;
+terminal RO, RC;
+
+// Non terminal tokens
+non terminal program;
+non terminal component_list, component;
+non terminal fact;
+non terminal rule;
+non terminal interrogation;
+non terminal predicate_list, predicate;
+non terminal argument_list, argument;
+non terminal functor;
+non terminal atom, variable;
+
+// Precedences
+precedence right error;
+precedence left CM, RO, RC;
+precedence left INT;
+precedence left REAL;
+precedence left QM_DASH;
+precedence left ATOM_STRING;
+
+// Grammar
+program ::= component_list
+    {:
+        if(!fact_found){
+            parser.report_error("AT LEAST ONE FACT IS EXPECTED!", parser.getToken());
+            parser.error_found = true;
+        }
+        if(!interrogation_found){
+            parser.report_error("AT LEAST ONE INTERROGATION IS EXPECTED!", parser.getToken());
+            parser.error_found = true;
+        }
+
+        if(parser.error_found)
+            return(null);
+
+        System.out.println("CORRECT!");
+    :};
+
+component_list ::= component | component_list component
+    | /* empty */; /* otherwise: parser error if the input code is empty */
+component ::= fact | rule | interrogation;
+
+fact ::= predicate DOT
+    {:
+        parser.fact_found = true;
+    :}
+    | error DOT
+        {:
+            parser.report_error("INCORRECT FACT PREDICATE!", parser.getToken());
+            parser.error_found = true;
+        :};
+
+rule ::= predicate COL_DASH predicate_list DOT
+    | predicate COL_DASH error DOT
+        {:
+            parser.report_error("INCORRECT RULE PREDICATE LIST!", parser.getToken());
+            parser.error_found = true;
+        :};
+
+interrogation ::= QM_DASH predicate_list DOT
+    {:
+        if(parser.interrogation_found){
+            parser.report_error("ONLY ONE INTERROGATION IS EXPECTED!", parser.getToken());
+            parser.error_found = true;
+        }
+        else
+            parser.interrogation_found = true;
+    :}
+    | QM_DASH error DOT
+        {:
+            parser.report_error("INCORRECT INTERROGATION PREDICATE LIST!", parser.getToken());
+            parser.error_found = true;
+        :};
+
+predicate_list ::= predicate | predicate_list CM predicate;
+predicate ::= functor argument_list RC | atom;
+argument_list ::= argument | argument_list CM argument;
+argument ::= variable | predicate;
+functor ::= atom RO;
+atom ::= ATOM_STRING | REAL | INT;
+variable ::= VAR_STRING;

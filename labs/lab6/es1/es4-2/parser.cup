@@ -1,0 +1,429 @@
+import java_cup.runtime.*;
+import java.io.*;
+import java.util.*;
+import java.lang.Object;
+
+
+parser code {:
+
+    public boolean DEBUG = false;
+
+    public boolean isCorrect = true;
+
+    // Redefinition of error functions
+    /* The report_error function, in this program, is called only when
+       an error, not managed by the error symbol, is found.
+       Indeed, when errors are recognized by the error symbol, the function
+       syntax_error (disabled in this program) is called.
+       This program is an example of error function redefinition: two new
+       functions are developed, pSynError and pSynWarning, used to print
+       syntactical errors and warning, respectively. */
+    public void report_error(String message, Object info) {
+        System.err.print("ERROR: Syntax error");
+        if (info instanceof Symbol)
+            if (((Symbol)info).left != -1){
+                int line = (((Symbol)info).left)+1;
+                int column = (((Symbol)info).right)+1;
+                System.err.print(" (linea "+line+", colonna "+column+"): ");
+            } else System.err.print(": ");
+        else System.err.print(": ");
+    }
+    public void syntax_error(Symbol cur_token){}
+
+        // Return the line number of actual symbol
+    public int getLine() {
+        if (((Symbol)stack.elementAt(tos)).left != -1){
+            return ((Symbol)stack.elementAt(tos)).left+1;
+        }else return -1;
+    }
+    // Return the column number of actual symbol
+    public int getColumn() {
+        if (((Symbol)stack.elementAt(tos)).left != -1){
+            return ((Symbol)stack.elementAt(tos)).right+1;
+        }else return -1;
+    }
+
+    public Object stack(int position) {
+        return (((Symbol)stack.elementAt(tos+position)).value);
+    }
+
+    public static int labelNum = 0;
+    public String genLabel() {
+        return "L" + (labelNum++);
+    }
+
+    public enum Type {
+        ERROR,
+        UNKNOWN,
+        INT,
+        DOUBLE,
+        ARRAY,
+        RESULT
+    }
+
+    public String typeToString(Type type) {
+        switch(type) {
+            case INT:
+                return "INT";
+            case DOUBLE:
+                return "DOUBLE";
+            default:
+        }
+        return "";
+    }
+
+    public class MyObj {
+        public Type type;
+        public Integer dim = 1;
+        public String value = null;
+        public String name = "";
+        public MyObj array = null;
+
+        public MyObj() {};
+        public MyObj(Type type) { this.type = type; }
+        public MyObj(String value) { this.value = value; }
+        public MyObj(Object value) { this.value = value.toString(); }
+        public MyObj(Type type, Object value) { this.type = type; this.value = value.toString(); }
+        public MyObj(Type type, Integer dim, Object value) { this.type = type; this.dim = dim; this.value = value.toString(); }
+        public MyObj(Type type, Integer dim) { this.type = type; this.dim = dim; }
+    }
+
+    // public HashMap<String, MyObj> symbolTable;
+
+    public void debug(String msg) {
+        if(DEBUG)
+            System.out.print("debug> " + msg);
+    }
+
+    public void debug(MyObj obj) { debug(obj.value); }
+
+    public MyObj decl(MyObj v) {
+        StringBuffer sb = new StringBuffer();
+        sb.append(typeToString(v.type) + " " + v.name);
+        MyObj a = v.array;
+        while(a != null) {
+            sb.append("[" + a.dim.toString() + "]");
+            a = a.array;
+        }
+        sb.append("\n");
+    
+        v.value = sb.toString();
+        debug(v);
+        return v;
+    }
+
+    public MyObj eval(MyObj c) {
+        c.value = new String("EVAL " + c.value + "\n");
+        debug(c);
+        return c;
+    }
+
+    public MyObj ass(MyObj d, MyObj s) {
+        debug("ass start\n");
+        debug(d);
+        debug(s);
+        debug("ass end\n");
+
+        d.value = new String(eval(s).value + ass(d).value);
+        debug(d);
+        return d;
+    }    
+
+    public MyObj ass(MyObj d) { 
+        d.value = new String("ASS " + d.value + "\n");
+        debug(d);
+        return d;
+    }
+
+    public MyObj print(MyObj s) {
+        s.value = new String("PRINT " + s.value + "\n");
+        debug(s);
+        return s;
+    }
+
+    public MyObj ifThen(MyObj c, MyObj s) {
+        String label = genLabel();
+        StringBuffer sb = new StringBuffer();
+
+        sb.append(eval(c).value);
+        sb.append("GOTOF " + label + "\n");
+        sb.append(s.value);
+        sb.append(label + ": ");
+
+        return new MyObj(sb.toString());
+    }
+
+    public MyObj ifThenElse(MyObj c, MyObj s1, MyObj s2) {
+        String label1 = genLabel();
+        String label2 = genLabel();
+        StringBuffer sb = new StringBuffer();
+
+        sb.append(eval(c).value);
+        sb.append("GOTOF " + label1 + "\n");
+        sb.append(s1.value);
+        sb.append("GOTO " + label2 + "\n");
+        sb.append(label1 + ": ");
+        sb.append(s2.value);
+        sb.append(label2 + ": ");
+
+        return new MyObj(sb.toString());    
+    }
+
+    public MyObj whileDo(MyObj c, MyObj s) {
+        String label1 = genLabel();
+        String label2 = genLabel();
+        StringBuffer sb = new StringBuffer();
+
+        sb.append(label1 + ": ");
+        sb.append(eval(c).value);
+        sb.append("GOTOF " + label2 + "\n");
+        sb.append(s.value);
+        sb.append("GOTO " + label1 + "\n");
+        sb.append(label2 + ": ");
+
+        return new MyObj(sb.toString());
+    }
+:};
+
+init with {:
+    // symbolTable = new HashMap<String, MyObj>();
+:}
+
+action code {:
+    private void pSynError(String message){
+        System.err.println("SYN ERROR: line: "+parser.getLine()+" col: "+parser.getColumn()+": "+message);
+        parser.isCorrect = false;
+        parser.done_parsing();
+    }
+    private void pSynWarning(String message){
+        System.err.println("SYN WARNING: line: "+parser.getLine()+" col: "+parser.getColumn()+": "+message);
+        parser.isCorrect = false;
+    }        
+:}
+
+
+// Terminal tokens
+terminal Integer INT;
+terminal Double DOUBLE;
+
+terminal PRINT, IF, WHILE, ELSE;
+terminal String ID;
+terminal RO, RC, BO, BC, S, CM, SO, SC;
+terminal PLUS, MINUS, STAR, DIV;
+terminal MIN, MAJ, MIN_EQ, EQ_MIN, MAJ_EQ, EQ_MAJ, EQ;
+terminal AND, OR, NOT;
+terminal INT_TYPE, DOUBLE_TYPE;
+terminal UMINUS;
+
+
+// Non terminal tokens
+non terminal prog;
+non terminal MyObj stmt_list;
+non terminal MyObj stmt;
+non terminal MyObj if;
+non terminal MyObj while;
+non terminal MyObj assignment;
+non terminal MyObj print;
+non terminal MyObj exp;
+non terminal mineq, majeq;
+
+non terminal MyObj decl_list;
+non terminal MyObj decl;
+non terminal MyObj var_list;
+non terminal MyObj var;
+non terminal MyObj type;
+non terminal MyObj array;
+non terminal MyObj if_condition;
+non terminal MyObj while_condition;
+non terminal MyObj id;
+
+// Precedences and associativities
+// lower precedences
+precedence left OR;
+precedence left AND;
+precedence left NOT;
+precedence left MIN, MAJ, MIN_EQ, EQ_MIN, MAJ_EQ, EQ_MAJ, EQ;
+precedence left PLUS, MINUS;
+precedence left STAR, DIV;
+precedence left UMINUS;
+// higher precedences
+
+
+//////////////////////////////////////
+// Grammar start
+//////////////////////////////////////
+
+start with prog;
+
+
+prog ::= decl_list:d stmt_list:s {:
+    if (parser.isCorrect)
+        // System.out.println("Program correctly recognized");
+        System.out.print(d.value);
+        System.out.print(s.value);
+        System.out.print("END");
+    :}
+;
+
+
+//////////////////////////////////////
+// Declarations
+//////////////////////////////////////
+
+decl_list ::= decl_list:dl decl:d {: RESULT = new MyObj(dl.value + d.value); :}
+    | {: RESULT = new MyObj(""); :}
+;
+
+decl ::= type var_list:vl S
+        {:
+            //System.out.print(vl.value);
+            RESULT = vl;
+        :}
+    | type error S {: pSynWarning("Error in declaration"); :}
+;
+
+type ::= INT_TYPE {: RESULT = new MyObj(Type.INT); :}
+    | DOUBLE_TYPE {: RESULT = new MyObj(Type.DOUBLE); :}
+;
+
+var_list ::= var:v
+         {:
+            v.type = ((MyObj)parser.stack(-1)).type;
+            RESULT = parser.decl(v);
+        :}
+    | var_list:vl CM var:v
+         {:
+            v.type = ((MyObj)parser.stack(-2)).type;
+            vl.value = vl.value + parser.decl(v).value;
+            RESULT = vl;
+        :}
+;
+
+var ::= ID:i array:a
+    {:
+        // TODO: check if ID is not present yet
+        a.name = i;
+        RESULT = a;
+    :}
+;
+
+array ::= /* empty */
+        {:
+            MyObj newObj = new MyObj(Type.UNKNOWN);
+            newObj.dim = 1;
+            RESULT = newObj;
+        :}
+    | array:a SO INT:i SC
+        {:
+            MyObj newObj = new MyObj(Type.ARRAY);
+            newObj.dim = i;
+
+            MyObj tmp = a;
+            if(tmp.array != null)
+                tmp = tmp.array;
+            tmp.array = newObj;
+
+            RESULT = a;
+        :}
+;
+
+
+//////////////////////////////////////
+// Instructions
+//////////////////////////////////////
+
+stmt_list ::= stmt_list:sl stmt:s {: RESULT = new MyObj(sl.value + s.value); :}
+    | stmt:s {: RESULT = s; :}
+    | error stmt {: pSynWarning("Error in statement"); :}
+;
+
+
+stmt ::= if:s {: RESULT = s; :}
+    | while:s {: RESULT = s; :}
+    | assignment:s {: RESULT = s; :}
+    | print:s {: RESULT = s; :}
+    | BO stmt_list:s BC {: RESULT = s; :}
+    | BO stmt_list error BC {: pSynWarning("Missing ; before }"); :}
+    | BO error BC {: pSynWarning("Missing ; before }"); :}
+    | error S {: pSynWarning("Error in statement"); :}
+;   
+
+// Assignment instruction
+assignment ::= id:i S {: RESULT = parser.ass(i); :}
+    | id:i EQ exp:e S {: RESULT = parser.ass(i, e); :}
+    | id EQ error S {: pSynWarning("Error in expression"); :}
+    | error EQ exp S {: pSynWarning("Error in assigment"); :}
+;
+
+
+// PRINT instruction
+print ::= PRINT id:i S
+        {: RESULT = parser.print(i); :}
+    | PRINT error S {: pSynWarning("Error in 'print' instruction"); :}
+;
+
+
+// IF instruction
+if ::= IF if_condition:c stmt:s1 ELSE stmt:s2 {: RESULT = parser.ifThenElse(c, s1, s2); :}
+     | IF if_condition:c stmt:s {: RESULT = parser.ifThen(c, s); :}
+     | IF if_condition stmt error stmt {: pSynWarning("Error 'else' expected in 'if' instruction"); :}
+
+;
+
+if_condition ::= RO exp:e RC {: RESULT = e; :}
+    | RO error RC {: pSynWarning("Error in 'if' condition"); :}
+    | error exp RC {: pSynWarning("Error '(' expected in 'if' instruciton"); :}
+    | RO exp error  {: pSynWarning("Error ')' expected in 'if' instruciton"); :}
+;
+
+
+// WHILE instruction
+while ::= WHILE while_condition:c stmt:s {: RESULT = parser.whileDo(c, s); :}
+;
+
+while_condition ::= RO exp:e RC {: RESULT = e; :}
+    | RO error RC {: pSynWarning("Error in 'while' condition"); :}
+    | error exp RC {: pSynWarning("Error '(' expected in 'while' instruction"); :}
+    | RO exp error  {: pSynWarning("Error ')' expected in 'while' instruction"); :}
+;
+
+
+// Expressions
+exp ::= 
+    /* Logical expressions */
+    exp:e1 AND exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " &")); :}
+    | exp:e1 OR exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " |")); :}
+    | NOT exp:e1 {: RESULT = new MyObj(new String(e1.value + " !")); :}
+
+    /* Comparison expressions */
+    | exp:e1 EQ EQ exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " ==")); :}
+    | exp:e1 MIN exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " <")); :}
+    | exp:e1 MAJ exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " >")); :}
+    | exp:e1 mineq exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " <=")); :}
+    | exp:e1 majeq exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " >=")); :}
+
+    /* Arithmetic expression */
+    | exp:e1 PLUS exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " +")); :}
+    | exp:e1 MINUS exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " -")); :}
+    | exp:e1 STAR exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " *")); :}
+    | exp:e1 DIV exp:e2 {: RESULT = new MyObj(new String(e1.value + " " + e2.value + " /")); :}
+
+    | RO exp:e RC {: RESULT = e; :}
+    | id:i {: RESULT = i; :}
+    | INT:i {: RESULT = new MyObj(Type.INT, i.toString()); :}
+    | DOUBLE:d {: RESULT = new MyObj(Type.DOUBLE, d.toString()); :}
+    | MINUS INT:i {: RESULT = new MyObj(Type.INT, (new Integer(-i)).toString()); :}
+    | MINUS DOUBLE:d {: RESULT = new MyObj(Type.DOUBLE, (new Double(-d)).toString()); :}
+    | RO error RC {: pSynWarning("Error in expression"); :}
+;
+
+
+mineq ::= MIN_EQ | EQ_MIN;
+majeq ::= MAJ_EQ | EQ_MAJ;
+
+
+id ::= ID:i {: RESULT = new MyObj(i); :}
+      |ID:i SO INT:n SC {: RESULT = new MyObj(i + "[" + n + "]"); :}
+      |ID:i1 SO ID:i2 SC {: RESULT = new MyObj(i1 + "[" + i2 + "]"); :}
+      | error SC {: pSynWarning("Error in vector"); :}
+;

@@ -1,0 +1,13 @@
+/*member(X,cons(X,_)).
+member(X,cons(_,Y)):-
+member(X,Y).
+
+start_list(cons(a,cons(b,cons(c,nil)))).*/
+
+/* missing comma */
+?- start_list(L) member(X,L), goal(X).
+
+/* multiple interrogation */
+?- start_list(L), member(X,L), goal(X).
+
+asd:- member(X.
